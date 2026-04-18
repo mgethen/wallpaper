@@ -223,7 +223,6 @@ function showScreensaver() {
       screensaverWindow.close()
       screensaverWindow = null
     }
-    lastActiveTime = Date.now()
   }
   
   powerMonitor.on('resume', closeScreensaver)

@@ -34,10 +34,8 @@ function saveSettingsToDisk() {
   }
 }
 
-// Wallpaper and Screensaver Timers
+// Wallpaper Timer
 let wallpaperTimer: NodeJS.Timeout | null = null
-let inactivityTimer: NodeJS.Timeout | null = null
-let lastActiveTime = Date.now()
 
 function getImagesList() {
   const imagesDir = join(app.getAppPath(), 'images')
@@ -145,7 +143,7 @@ $monitors | ConvertTo-Json -Compress
     await fs.promises.writeFile(ps1Path, script, 'utf8')
     try {
       const { stdout } = await execFileAsync('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1Path])
-      let ids = []
+      let ids: string[] = []
       try {
         ids = JSON.parse(stdout.trim() || '[]')
         if (!Array.isArray(ids)) ids = [ids]

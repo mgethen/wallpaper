@@ -37,8 +37,12 @@ function saveSettingsToDisk() {
 // Wallpaper Timer
 let wallpaperTimer: NodeJS.Timeout | null = null
 
+function getImagesDir() {
+  return is.dev ? join(app.getAppPath(), 'images') : join(process.resourcesPath, 'images')
+}
+
 function getImagesList() {
-  const imagesDir = join(app.getAppPath(), 'images')
+  const imagesDir = getImagesDir()
   if (!fs.existsSync(imagesDir)) return []
   const files = fs.readdirSync(imagesDir)
   return files.filter(f => f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg'))
@@ -168,7 +172,7 @@ async function changeWallpaper() {
   const images = getImagesList()
   if (images.length === 0) return
   const randomImage = images[Math.floor(Math.random() * images.length)]
-  const imagePath = join(app.getAppPath(), 'images', randomImage)
+  const imagePath = join(getImagesDir(), randomImage)
   try {
     await setWallpaperCrossPlatform(imagePath, 'all')
     console.log('Auto-cycled Wallpaper set to', imagePath)
@@ -286,7 +290,7 @@ app.whenReady().then(() => {
   protocol.registerFileProtocol('local-image', (request, callback) => {
     const url = request.url.replace('local-image://', '')
     try {
-      return callback(join(app.getAppPath(), 'images', decodeURIComponent(url)))
+      return callback(join(getImagesDir(), decodeURIComponent(url)))
     } catch (error) {
       console.error('Failed to load local image', error)
     }
@@ -297,7 +301,7 @@ app.whenReady().then(() => {
   ipcMain.handle('get-monitors', async () => await getMonitors())
   
   ipcMain.handle('set-wallpaper', async (_, { imageName, monitorId }) => {
-    const imagePath = join(app.getAppPath(), 'images', imageName)
+    const imagePath = join(getImagesDir(), imageName)
     try {
       await setWallpaperCrossPlatform(imagePath, monitorId)
       return true

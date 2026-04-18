@@ -45,6 +45,13 @@
   "build": {
     "appId": "com.technologia.art.wallpaper",
     "productName": "Technologia.Art Wallpaper Manager",
+    "extraResources": [
+      {
+        "from": "images",
+        "to": "images",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
       "target": ["dmg"],
       "identity": null

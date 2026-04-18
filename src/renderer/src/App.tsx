@@ -42,7 +42,7 @@ const App: React.FC = () => {
   return (
     <div className="container">
       <header className="header">
-        <img src="/logo.png" alt="Technologia.Art Logo" className="header-logo" />
+        <img src="./logo.png" alt="Technologia.Art Logo" className="header-logo" />
         <div className="header-text">
           <h1>Technologia.Art Wallpaper Manager</h1>
           <p>Manage your desktop aesthetics with ease.</p>

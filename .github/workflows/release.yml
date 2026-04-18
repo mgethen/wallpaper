@@ -23,7 +23,7 @@ jobs:
           node-version: 24
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build App (macOS)
         if: matrix.os == 'macos-latest'

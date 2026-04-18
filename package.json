@@ -41,5 +41,16 @@
     "react-dom": "^18.2.0",
     "typescript": "^5.3.3",
     "vite": "^8.0.8"
+  },
+  "build": {
+    "appId": "com.technologia.art.wallpaper",
+    "productName": "Technologia.Art Wallpaper Manager",
+    "mac": {
+      "target": ["dmg"],
+      "identity": null
+    },
+    "win": {
+      "target": ["nsis"]
+    }
   }
 }

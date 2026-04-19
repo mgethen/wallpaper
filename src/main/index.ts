@@ -301,7 +301,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
   
   if (process.platform === 'darwin') {
-    app.dock.hide()
+    app.dock?.hide()
   }
   
   loadSettings()

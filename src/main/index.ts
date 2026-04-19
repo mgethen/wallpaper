@@ -300,6 +300,10 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
   
+  if (process.platform === 'darwin') {
+    app.dock.hide()
+  }
+  
   loadSettings()
   startWallpaperCycle()
   

@@ -1,10 +1,12 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, powerMonitor, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, powerMonitor, screen, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fs from 'fs'
 
 let mainWindow: BrowserWindow | null = null
-let screensaverWindow: BrowserWindow | null = null
+let screensaverWindows: BrowserWindow[] = []
+let tray: Tray | null = null
+let isQuitting = false
 
 // Settings state
 let settings = {
@@ -195,38 +197,45 @@ function startWallpaperCycle() {
 }
 
 function showScreensaver() {
-  if (screensaverWindow || settings.inactivityPeriod === 0) return
+  if (screensaverWindows.length > 0 || settings.inactivityPeriod === 0) return
   
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.workAreaSize
+  const displays = screen.getAllDisplays()
   
-  screensaverWindow = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
-    frame: false,
-    fullscreen: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true
-    }
+  displays.forEach((display) => {
+    const { bounds } = display
+    
+    const win = new BrowserWindow({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      frame: false,
+      fullscreen: true,
+      hasShadow: false,
+      thickFrame: false,
+      roundedCorners: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        contextIsolation: true
+      }
+    })
+    
+    const url = is.dev && process.env['ELECTRON_RENDERER_URL']
+      ? `${process.env['ELECTRON_RENDERER_URL']}/#/screensaver`
+      : `file://${join(__dirname, '../renderer/index.html')}#/screensaver`
+      
+    win.loadURL(url)
+    screensaverWindows.push(win)
   })
   
-  const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-    ? `${process.env['ELECTRON_RENDERER_URL']}/#/screensaver`
-    : `file://${join(__dirname, '../renderer/index.html')}#/screensaver`
-    
-  screensaverWindow.loadURL(url)
-  
   const closeScreensaver = () => {
-    if (screensaverWindow) {
-      screensaverWindow.close()
-      screensaverWindow = null
-    }
+    screensaverWindows.forEach(win => {
+      if (!win.isDestroyed()) win.close()
+    })
+    screensaverWindows = []
   }
   
   powerMonitor.on('resume', closeScreensaver)
@@ -236,13 +245,13 @@ function checkInactivity() {
   if (settings.inactivityPeriod === 0) return
   
   const idleTime = powerMonitor.getSystemIdleTime()
-  if (idleTime >= settings.inactivityPeriod * 60 && !screensaverWindow) {
+  if (idleTime >= settings.inactivityPeriod * 60 && screensaverWindows.length === 0) {
     showScreensaver()
-  } else if (idleTime < settings.inactivityPeriod * 60 && screensaverWindow) {
-    if (screensaverWindow) {
-      screensaverWindow.close()
-      screensaverWindow = null
-    }
+  } else if (idleTime < settings.inactivityPeriod * 60 && screensaverWindows.length > 0) {
+    screensaverWindows.forEach(win => {
+      if (!win.isDestroyed()) win.close()
+    })
+    screensaverWindows = []
   }
 }
 
@@ -261,6 +270,13 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -282,6 +298,33 @@ app.whenReady().then(() => {
   startWallpaperCycle()
   
   setInterval(checkInactivity, 10000)
+
+  // Setup Tray
+  const iconPath = is.dev 
+    ? join(__dirname, '../../src/renderer/public/logo.png') 
+    : join(__dirname, '../renderer/logo.png')
+    
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show Control Panel', click: () => mainWindow?.show() },
+    { type: 'separator' },
+    { 
+      label: 'Quit', 
+      click: () => {
+        isQuitting = true
+        app.quit()
+      } 
+    }
+  ])
+  
+  tray.setToolTip('Technologia.Art Wallpaper Manager')
+  tray.setContextMenu(contextMenu)
+  
+  tray.on('click', () => {
+    mainWindow?.show()
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -321,10 +364,10 @@ app.whenReady().then(() => {
   })
   
   ipcMain.on('close-screensaver', () => {
-    if (screensaverWindow) {
-      screensaverWindow.close()
-      screensaverWindow = null
-    }
+    screensaverWindows.forEach(win => {
+      if (!win.isDestroyed()) win.close()
+    })
+    screensaverWindows = []
   })
 
   createWindow()
@@ -335,7 +378,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // Do nothing. We want the app to stay alive in the tray.
 })

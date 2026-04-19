@@ -29,7 +29,9 @@ let child_process = require("child_process");
 let util = require("util");
 //#region src/main/index.ts
 var mainWindow = null;
-var screensaverWindow = null;
+var screensaverWindows = [];
+var tray = null;
+var isQuitting = false;
 var settings = {
 	inactivityPeriod: 5,
 	screensaverCycleFrequency: "10m",
@@ -57,8 +59,11 @@ function saveSettingsToDisk() {
 	}
 }
 var wallpaperTimer = null;
+function getImagesDir() {
+	return _electron_toolkit_utils.is.dev ? (0, path.join)(electron.app.getAppPath(), "images") : (0, path.join)(process.resourcesPath, "images");
+}
 function getImagesList() {
-	const imagesDir = (0, path.join)(electron.app.getAppPath(), "images");
+	const imagesDir = getImagesDir();
 	if (!fs.default.existsSync(imagesDir)) return [];
 	return fs.default.readdirSync(imagesDir).filter((f) => f.endsWith(".jpg") || f.endsWith(".png") || f.endsWith(".jpeg"));
 }
@@ -191,7 +196,7 @@ async function changeWallpaper() {
 	const images = getImagesList();
 	if (images.length === 0) return;
 	const randomImage = images[Math.floor(Math.random() * images.length)];
-	const imagePath = (0, path.join)(electron.app.getAppPath(), "images", randomImage);
+	const imagePath = (0, path.join)(getImagesDir(), randomImage);
 	try {
 		await setWallpaperCrossPlatform(imagePath, "all");
 		console.log("Auto-cycled Wallpaper set to", imagePath);
@@ -208,42 +213,45 @@ function startWallpaperCycle() {
 	if (ms > 0) wallpaperTimer = setInterval(changeWallpaper, ms);
 }
 function showScreensaver() {
-	if (screensaverWindow || settings.inactivityPeriod === 0) return;
-	const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
-	screensaverWindow = new electron.BrowserWindow({
-		width,
-		height,
-		x: 0,
-		y: 0,
-		frame: false,
-		fullscreen: true,
-		alwaysOnTop: true,
-		skipTaskbar: true,
-		webPreferences: {
-			preload: (0, path.join)(__dirname, "../preload/index.js"),
-			sandbox: false,
-			contextIsolation: true
-		}
+	if (screensaverWindows.length > 0 || settings.inactivityPeriod === 0) return;
+	electron.screen.getAllDisplays().forEach((display) => {
+		const { bounds } = display;
+		const win = new electron.BrowserWindow({
+			x: bounds.x,
+			y: bounds.y,
+			width: bounds.width,
+			height: bounds.height,
+			frame: false,
+			fullscreen: true,
+			alwaysOnTop: true,
+			skipTaskbar: true,
+			webPreferences: {
+				preload: (0, path.join)(__dirname, "../preload/index.js"),
+				sandbox: false,
+				contextIsolation: true
+			}
+		});
+		const url = _electron_toolkit_utils.is.dev && process.env["ELECTRON_RENDERER_URL"] ? `${process.env["ELECTRON_RENDERER_URL"]}/#/screensaver` : `file://${(0, path.join)(__dirname, "../renderer/index.html")}#/screensaver`;
+		win.loadURL(url);
+		screensaverWindows.push(win);
 	});
-	const url = _electron_toolkit_utils.is.dev && process.env["ELECTRON_RENDERER_URL"] ? `${process.env["ELECTRON_RENDERER_URL"]}/#/screensaver` : `file://${(0, path.join)(__dirname, "../renderer/index.html")}#/screensaver`;
-	screensaverWindow.loadURL(url);
 	const closeScreensaver = () => {
-		if (screensaverWindow) {
-			screensaverWindow.close();
-			screensaverWindow = null;
-		}
+		screensaverWindows.forEach((win) => {
+			if (!win.isDestroyed()) win.close();
+		});
+		screensaverWindows = [];
 	};
 	electron.powerMonitor.on("resume", closeScreensaver);
 }
 function checkInactivity() {
 	if (settings.inactivityPeriod === 0) return;
 	const idleTime = electron.powerMonitor.getSystemIdleTime();
-	if (idleTime >= settings.inactivityPeriod * 60 && !screensaverWindow) showScreensaver();
-	else if (idleTime < settings.inactivityPeriod * 60 && screensaverWindow) {
-		if (screensaverWindow) {
-			screensaverWindow.close();
-			screensaverWindow = null;
-		}
+	if (idleTime >= settings.inactivityPeriod * 60 && screensaverWindows.length === 0) showScreensaver();
+	else if (idleTime < settings.inactivityPeriod * 60 && screensaverWindows.length > 0) {
+		screensaverWindows.forEach((win) => {
+			if (!win.isDestroyed()) win.close();
+		});
+		screensaverWindows = [];
 	}
 }
 function createWindow() {
@@ -261,6 +269,12 @@ function createWindow() {
 	mainWindow.on("ready-to-show", () => {
 		mainWindow?.show();
 	});
+	mainWindow.on("close", (event) => {
+		if (!isQuitting) {
+			event.preventDefault();
+			mainWindow?.hide();
+		}
+	});
 	mainWindow.webContents.setWindowOpenHandler((details) => {
 		electron.shell.openExternal(details.url);
 		return { action: "deny" };
@@ -273,13 +287,37 @@ electron.app.whenReady().then(() => {
 	loadSettings();
 	startWallpaperCycle();
 	setInterval(checkInactivity, 1e4);
+	const iconPath = _electron_toolkit_utils.is.dev ? (0, path.join)(__dirname, "../../src/renderer/public/logo.png") : (0, path.join)(__dirname, "../renderer/logo.png");
+	tray = new electron.Tray(electron.nativeImage.createFromPath(iconPath).resize({
+		width: 16,
+		height: 16
+	}));
+	const contextMenu = electron.Menu.buildFromTemplate([
+		{
+			label: "Show Control Panel",
+			click: () => mainWindow?.show()
+		},
+		{ type: "separator" },
+		{
+			label: "Quit",
+			click: () => {
+				isQuitting = true;
+				electron.app.quit();
+			}
+		}
+	]);
+	tray.setToolTip("Technologia.Art Wallpaper Manager");
+	tray.setContextMenu(contextMenu);
+	tray.on("click", () => {
+		mainWindow?.show();
+	});
 	electron.app.on("browser-window-created", (_, window) => {
 		_electron_toolkit_utils.optimizer.watchWindowShortcuts(window);
 	});
 	electron.protocol.registerFileProtocol("local-image", (request, callback) => {
 		const url = request.url.replace("local-image://", "");
 		try {
-			return callback((0, path.join)(electron.app.getAppPath(), "images", decodeURIComponent(url)));
+			return callback((0, path.join)(getImagesDir(), decodeURIComponent(url)));
 		} catch (error) {
 			console.error("Failed to load local image", error);
 		}
@@ -287,7 +325,7 @@ electron.app.whenReady().then(() => {
 	electron.ipcMain.handle("get-images", () => getImagesList());
 	electron.ipcMain.handle("get-monitors", async () => await getMonitors());
 	electron.ipcMain.handle("set-wallpaper", async (_, { imageName, monitorId }) => {
-		const imagePath = (0, path.join)(electron.app.getAppPath(), "images", imageName);
+		const imagePath = (0, path.join)(getImagesDir(), imageName);
 		try {
 			await setWallpaperCrossPlatform(imagePath, monitorId);
 			return true;
@@ -307,17 +345,15 @@ electron.app.whenReady().then(() => {
 		return true;
 	});
 	electron.ipcMain.on("close-screensaver", () => {
-		if (screensaverWindow) {
-			screensaverWindow.close();
-			screensaverWindow = null;
-		}
+		screensaverWindows.forEach((win) => {
+			if (!win.isDestroyed()) win.close();
+		});
+		screensaverWindows = [];
 	});
 	createWindow();
 	electron.app.on("activate", function() {
 		if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();
 	});
 });
-electron.app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") electron.app.quit();
-});
+electron.app.on("window-all-closed", () => {});
 //#endregion

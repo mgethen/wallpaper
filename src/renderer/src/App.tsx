@@ -115,6 +115,13 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          <div style={{ flexGrow: 1 }}></div>
+
+          <div className="settings-footer">
+            <p>All Images belong to NASA and are provided for informational and educational purposes only.</p>
+            <p>App design and code &copy; Technologia.Art</p>
+          </div>
+
         </aside>
 
         <section className="gallery-section">

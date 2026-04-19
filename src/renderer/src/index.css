@@ -131,6 +131,17 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.1);
 }
 
+.settings-footer {
+  margin-top: 16px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.settings-footer p {
+  margin-bottom: 8px;
+}
+
 /* Gallery Section */
 .gallery-section {
   flex: 1;

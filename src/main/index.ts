@@ -210,7 +210,7 @@ function showScreensaver() {
       width: bounds.width,
       height: bounds.height,
       frame: false,
-      fullscreen: true,
+      fullscreen: process.platform === 'win32',
       hasShadow: false,
       thickFrame: false,
       roundedCorners: false,
@@ -228,6 +228,12 @@ function showScreensaver() {
       : `file://${join(__dirname, '../renderer/index.html')}#/screensaver`
       
     win.loadURL(url)
+    
+    if (process.platform === 'darwin') {
+      win.setAlwaysOnTop(true, 'screen-saver')
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    }
+    
     screensaverWindows.push(win)
   })
   
